@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: cashflow-db
+    environment:
+      POSTGRES_USER: cashflow
+      POSTGRES_PASSWORD: cashflow
+      POSTGRES_DB: cashflow
+    ports:
+      - "5434:5432"
+    volumes:
+      - cashflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cashflow -d cashflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    container_name: cashflow-api
+    environment:
+      DATABASE_URL: postgresql+psycopg://cashflow:cashflow@db:5432/cashflow
+      CORS_ORIGINS: http://localhost:5174,http://127.0.0.1:5174
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python -m app.seed &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  web:
+    build: ./frontend
+    container_name: cashflow-web
+    environment:
+      VITE_API_URL: http://localhost:8001
+    ports:
+      - "5174:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  cashflow_pgdata:
